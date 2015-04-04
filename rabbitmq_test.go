@@ -59,7 +59,7 @@ func TestRMQPop(t *testing.T) {
 		t.Error("Error Popping from queue")
 	}
 
-	queue.Backend.Close()
+	queue.Backend.Clear()
 }
 
 func TestRMQPeek(t *testing.T) {
@@ -96,5 +96,39 @@ func TestRMQPeek(t *testing.T) {
 		t.Error("Error Popping from queue")
 	}
 
-	queue.Backend.Close()
+	queue.Backend.Clear()
+}
+
+func TestRMQClear(t *testing.T) {
+	skipIfNotRMQIntegrationTest(t)
+	queue := &Queue{Backend: NewRabbitMQStrategy(RMQ_URI, RMQ_QUEUE)}
+
+	if err := queue.Push([]byte("a")); err != nil {
+		t.Error("Error Pushing to queue")
+	}
+
+	if err := queue.Push([]byte("b")); err != nil {
+		t.Error("Error Pushing to queue")
+	}
+
+	errClear := queue.Clear()
+	if errClear != nil {
+		t.Error("Error Clearing queue")
+	}
+
+	actualPeek, errPeek := queue.Peek()
+	if len(actualPeek) != 0 {
+		t.Error("Not all data was cleared ")
+	}
+
+	actualPop, errPop := queue.Peek()
+	if len(actualPop) != 0 {
+		t.Error("Not all data was cleared ")
+	}
+
+	if errClear != nil || errPeek != nil || errPop != nil {
+		t.Error("Error Popping from queue")
+	}
+
+	queue.Backend.Clear()
 }

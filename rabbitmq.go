@@ -1,34 +1,32 @@
 package valize
 
 import (
-	"log"
-
 	"github.com/streadway/amqp"
 )
 
 type RabbitMQStraegy struct {
-	conn *amqp.Connection
 	name string
+	conn *amqp.Connection
+	ch   *amqp.Channel
 }
 
 func NewRabbitMQStrategy(connURI string, queueName string) *RabbitMQStraegy {
 	client, err := amqp.Dial(connURI)
 	LogOnErr(err, "Failed to connect to RabbitMQ")
-	ch, chanErr := client.Channel()
+	channel, chanErr := client.Channel()
 	LogOnErr(chanErr, "Failed to open a channel")
-	_, queueErr := buildQueue(ch, queueName)
+	_, queueErr := buildQueue(channel, queueName)
 	LogOnErr(queueErr, "Failed to declare queue")
 
 	return &RabbitMQStraegy{
-		conn: client,
 		name: queueName,
+		conn: client,
+		ch:   channel,
 	}
 }
 
 func (s *RabbitMQStraegy) Push(elem []byte) error {
-	ch, chanErr := s.conn.Channel()
-	LogOnErr(chanErr, "Failed to open a channel")
-	publishErr := ch.Publish(
+	publishErr := s.ch.Publish(
 		"",     // exchange
 		s.name, // routing key
 		false,  // mandatory
@@ -41,16 +39,13 @@ func (s *RabbitMQStraegy) Push(elem []byte) error {
 	return publishErr
 }
 func (s *RabbitMQStraegy) Peek() ([]byte, error) {
-	ch, chanErr := s.conn.Channel()
-	LogOnErr(chanErr, "Failed to open a channel")
-	delivery, ok, err := ch.Get(
+	delivery, ok, err := s.ch.Get(
 		s.name, // queue
 		false,  // auto-ack
 	)
 	if ok {
 		// Requeue message
 		delivery.Reject(true)
-		log.Printf("%#v delivery", delivery)
 		return delivery.Body, err
 	} else {
 		LogOnErr(err, "Failed to register a consumer")
@@ -59,50 +54,35 @@ func (s *RabbitMQStraegy) Peek() ([]byte, error) {
 }
 
 func (s *RabbitMQStraegy) Pop() ([]byte, error) {
-	ch, chanErr := s.conn.Channel()
-	LogOnErr(chanErr, "Failed to open a channel")
-	// msgs, err := s.channel.Consume(
-	// 	s.name, // queue
-	// 	"",           // consumer
-	// 	true,         // auto-ack
-	// 	false,        // exclusive
-	// 	false,        // no-local
-	// 	true,         // no-wait
-	// 	nil,          // args
-	// )
-	delivery, ok, err := ch.Get(
+	delivery, ok, err := s.ch.Get(
 		s.name, // queue
 		true,   // auto-ack
 	)
 	if ok {
-		// log.Printf("%#v delivery", delivery)
 		return delivery.Body, err
 	} else {
 		LogOnErr(err, "Failed to register a consumer")
 		return nil, err
 	}
-	// delivery := <-msgs
-	// return (<-msgs).Body, err
-	// return []byte{}, nil
 }
 
 func (s *RabbitMQStraegy) Clear() error {
-	return nil
-}
-
-func (s *RabbitMQStraegy) Close() error {
-	log.Println("Closing channel")
-	ch, chanErr := s.conn.Channel()
-	LogOnErr(chanErr, "Failed to open a channel")
-	defer ch.Close()
-	ch.QueueDelete(
+	s.ch.QueueDelete(
 		s.name,
 		true,  // ifused
 		false, // ifempty
 		true,  // noWait
 	)
-	chanCloseErr := ch.Cancel("", true)
+	// Re-create queue
+	_, queueErr := buildQueue(s.ch, s.name)
+	LogOnErr(queueErr, "Failed to create queue")
+	return queueErr
+}
+
+func (s *RabbitMQStraegy) Close() error {
+	chanCloseErr := s.ch.Cancel("", true)
 	LogOnErr(chanCloseErr, "Failed to close a channel")
+
 	return nil
 }
 
