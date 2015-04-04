@@ -40,37 +40,48 @@ func (s *RabbitMQStraegy) Peek() ([]byte, error) {
 
 func (s *RabbitMQStraegy) Pop() ([]byte, error) {
 	ch, q := s.buildQueue()
+	defer ch.Close()
 
-	// msgs, err := ch.Consume(
-	// 	q.Name, // queue
-	// 	"",     // consumer
-	// 	true,   // auto-ack
-	// 	false,  // exclusive
-	// 	false,  // no-local
-	// 	true,   // no-wait
-	// 	nil,    // args
-	// )
-	delivery, ok, err := ch.Get(
+	msgs, err := ch.Consume(
 		q.Name, // queue
+		"",     // consumer
 		true,   // auto-ack
+		false,  // exclusive
+		false,  // no-local
+		true,   // no-wait
+		nil,    // args
 	)
+
+	// delivery, ok, err := ch.Get(
+	// 	q.Name, // queue
+	// 	true,   // auto-ack
+	// )
 	LogOnErr(err, "Failed to register a consumer")
-	if ok {
-		return delivery.Body, err
-	} else {
-		return nil, err
-	}
+	// if ok {
+	// 	return delivery.Body, err
+	// } else {
+	// 	return nil, err
+	// }
+	delivery := <-msgs
+	// return (<-msgs).Body, err
+	return delivery.Body, err
+	// _ = msgs
+	// _ = err
+	// return []byte{}, nil
 }
 
 func (s *RabbitMQStraegy) Clear() error {
 	ch, chanErr := s.conn.Channel()
 	LogOnErr(chanErr, "Failed to open a channel")
+	defer ch.Close()
 	ch.QueueDelete(
 		s.name,
 		true,  // ifused
 		false, // ifempty
 		true,  // noWait
 	)
+	chanCloseErr := ch.Cancel("", true)
+	LogOnErr(chanCloseErr, "Failed to close a channel")
 	return nil
 }
 
