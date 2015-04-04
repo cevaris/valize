@@ -35,6 +35,10 @@ func (s *MockQueue) Clear() error {
 	s.Store = nil
 	return nil
 }
+func (s *MockQueue) Close() error {
+	s.Store = nil
+	return nil
+}
 
 func TestQueueInit(t *testing.T) {
 	actual := &Queue{Backend: NewMockQueue()}

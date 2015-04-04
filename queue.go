@@ -5,6 +5,7 @@ type QueueStrategy interface {
 	Peek() ([]byte, error)
 	Pop() ([]byte, error)
 	Clear() error
+	Close() error
 }
 
 type Queue struct {
@@ -21,6 +22,9 @@ func (s *Queue) Peek() ([]byte, error) {
 func (s *Queue) Pop() ([]byte, error) {
 	return s.Backend.Pop()
 }
-func (s *Queue) Cleear() error {
+func (s *Queue) Clear() error {
 	return s.Backend.Clear()
+}
+func (s *Queue) Close() error {
+	return s.Backend.Close()
 }
