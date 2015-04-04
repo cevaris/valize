@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	// "time"
 )
 
 var RMQ_URI string = "amqp://guest:guest@localhost:5672/"
@@ -37,22 +36,16 @@ func TestRMQPop(t *testing.T) {
 		t.Error("Error Pushing to queue")
 	}
 
-	t.Log("1")
 	actual1, err1 := queue.Pop()
 	expected1 := []byte("a")
 	if len(actual1) != 1 || actual1[0] != expected1[0] {
 		t.Error("Assert Fail", actual1, expected1)
 	}
 
-	t.Log("2")
 	actual2, err2 := queue.Pop()
 	expected2 := []byte("b")
 	if len(actual2) != 1 || actual2[0] != expected2[0] {
 		t.Error("Assert Fail", actual2, expected2)
-	}
-
-	if err1 != nil || err2 != nil {
-		t.Error("Error Popping from queue")
 	}
 
 	// Should return nothing
@@ -62,8 +55,46 @@ func TestRMQPop(t *testing.T) {
 		t.Error("Assert Fail", actual3, nil)
 	}
 
-	if err3 == nil {
-		t.Error("Error Found extra messages ")
+	if err1 != nil || err2 != nil || err3 != nil {
+		t.Error("Error Popping from queue")
 	}
+
+	queue.Backend.Close()
+}
+
+func TestRMQPeek(t *testing.T) {
+	skipIfNotRMQIntegrationTest(t)
+	queue := &Queue{Backend: NewRabbitMQStrategy(RMQ_URI, RMQ_QUEUE)}
+
+	if err := queue.Push([]byte("a")); err != nil {
+		t.Error("Error Pushing to queue")
+	}
+
+	if err := queue.Push([]byte("b")); err != nil {
+		t.Error("Error Pushing to queue")
+	}
+
+	actual1, err1 := queue.Peek()
+	expected1 := []byte("a")
+	if len(actual1) != 1 || actual1[0] != expected1[0] {
+		t.Error("Assert Fail", actual1, expected1)
+	}
+
+	actual2, err2 := queue.Pop()
+	expected2 := []byte("a")
+	if len(actual2) != 1 || actual2[0] != expected2[0] {
+		t.Error("Assert Fail", actual2, expected2)
+	}
+
+	actual3, err3 := queue.Peek()
+	expected3 := []byte("b")
+	if len(actual3) != 1 || actual3[0] != expected3[0] {
+		t.Error("Assert Fail", actual3, expected3)
+	}
+
+	if err1 != nil || err2 != nil || err3 != nil {
+		t.Error("Error Popping from queue")
+	}
+
 	queue.Backend.Close()
 }

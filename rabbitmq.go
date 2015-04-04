@@ -1,16 +1,14 @@
 package valize
 
 import (
-	"errors"
 	"log"
 
 	"github.com/streadway/amqp"
 )
 
 type RabbitMQStraegy struct {
-	conn  *amqp.Connection
-	name  string
-	queue amqp.Queue
+	conn *amqp.Connection
+	name string
 }
 
 func NewRabbitMQStrategy(connURI string, queueName string) *RabbitMQStraegy {
@@ -18,13 +16,12 @@ func NewRabbitMQStrategy(connURI string, queueName string) *RabbitMQStraegy {
 	LogOnErr(err, "Failed to connect to RabbitMQ")
 	ch, chanErr := client.Channel()
 	LogOnErr(chanErr, "Failed to open a channel")
-	q, queueErr := buildQueue(ch, queueName)
+	_, queueErr := buildQueue(ch, queueName)
 	LogOnErr(queueErr, "Failed to declare queue")
 
 	return &RabbitMQStraegy{
-		conn:  client,
-		name:  queueName,
-		queue: q,
+		conn: client,
+		name: queueName,
 	}
 }
 
@@ -32,10 +29,10 @@ func (s *RabbitMQStraegy) Push(elem []byte) error {
 	ch, chanErr := s.conn.Channel()
 	LogOnErr(chanErr, "Failed to open a channel")
 	publishErr := ch.Publish(
-		"",           // exchange
-		s.queue.Name, // routing key
-		false,        // mandatory
-		false,        // immediate
+		"",     // exchange
+		s.name, // routing key
+		false,  // mandatory
+		false,  // immediate
 		amqp.Publishing{
 			ContentType: "text/plain",
 			Body:        elem,
@@ -44,14 +41,28 @@ func (s *RabbitMQStraegy) Push(elem []byte) error {
 	return publishErr
 }
 func (s *RabbitMQStraegy) Peek() ([]byte, error) {
-	return []byte{}, nil
+	ch, chanErr := s.conn.Channel()
+	LogOnErr(chanErr, "Failed to open a channel")
+	delivery, ok, err := ch.Get(
+		s.name, // queue
+		false,  // auto-ack
+	)
+	if ok {
+		// Requeue message
+		delivery.Reject(true)
+		log.Printf("%#v delivery", delivery)
+		return delivery.Body, err
+	} else {
+		LogOnErr(err, "Failed to register a consumer")
+		return nil, err
+	}
 }
 
 func (s *RabbitMQStraegy) Pop() ([]byte, error) {
 	ch, chanErr := s.conn.Channel()
 	LogOnErr(chanErr, "Failed to open a channel")
 	// msgs, err := s.channel.Consume(
-	// 	s.queue.Name, // queue
+	// 	s.name, // queue
 	// 	"",           // consumer
 	// 	true,         // auto-ack
 	// 	false,        // exclusive
@@ -60,17 +71,15 @@ func (s *RabbitMQStraegy) Pop() ([]byte, error) {
 	// 	nil,          // args
 	// )
 	delivery, ok, err := ch.Get(
-		s.queue.Name, // queue
-		true,         // auto-ack
+		s.name, // queue
+		true,   // auto-ack
 	)
 	if ok {
-		log.Printf("%#v delivery", delivery)
+		// log.Printf("%#v delivery", delivery)
 		return delivery.Body, err
-	} else if err != nil {
+	} else {
 		LogOnErr(err, "Failed to register a consumer")
 		return nil, err
-	} else {
-		return nil, errors.New("Queue is empty")
 	}
 	// delivery := <-msgs
 	// return (<-msgs).Body, err
